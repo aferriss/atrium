@@ -30,12 +30,16 @@ var threeDRttScene;
 var threeDRttTex;
 var box;
 var fbEqShader;
+var threshShader, threshScene;
+var fxaaShader, fxaaScene;
+
+var semTextures = [];
 
 var texW = w;
 var texH = h;
 
 function init(){
-  initWebcam();
+  //initWebcam();
   
   scene = new THREE.Scene();
   camScene = new THREE.Scene();
@@ -47,6 +51,8 @@ function init(){
   blurVScene = new THREE.Scene();
   bloomScene = new THREE.Scene();
   threeDRttScene = new THREE.Scene();
+  threshScene = new THREE.Scene();
+  fxaaScene = new THREE.Scene();
 
   orthoCamera = new THREE.OrthographicCamera( w/-2, w/2, h/2, h/-2, -10000, 10000);
   camera = new THREE.PerspectiveCamera(120, w/h, 0.1,4000000);
@@ -63,7 +69,22 @@ function init(){
   blurVScene.add(orthoCamera);
   bloomScene.add(orthoCamera);
   threeDRttScene.add(orthoCamera);
+  threshScene.add(orthoCamera);
+  fxaaScene.add(orthoCamera);
 
+
+  for(var i = 1; i<49; i++){
+    var st;
+    if(i < 10){
+      st = THREE.ImageUtils.loadTexture('images/textures/0000'+i+'.png');
+    }
+    else{
+      st = THREE.ImageUtils.loadTexture('images/textures/000'+i+'.png');
+    } 
+    semTextures.push(st);
+  }
+
+  console.log(semTextures);
 
 
   tex = new THREE.WebGLRenderTarget(texW, texH, {minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat });
@@ -79,10 +100,11 @@ function init(){
   bloomTex = new THREE.WebGLRenderTarget(texW, texH, {minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat });
   threeDRtt = new THREE.WebGLRenderTarget(texW, texH, {minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat });
   threeDRttTex = new THREE.WebGLRenderTarget(texW, texH, {minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat });
+  threshTex = new THREE.WebGLRenderTarget(texW, texH, {minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat });
 
 
-  videoTexture = new THREE.Texture( video );
-  videoTexture.minFilter = THREE.LinearFilter;
+  //videoTexture = new THREE.Texture( video );
+  //videoTexture.minFilter = THREE.LinearFilter;
 
   shader = new THREE.ShaderMaterial({
     uniforms: {
@@ -116,6 +138,24 @@ function init(){
     transparent: false
   });
 
+  threshShader = new THREE.ShaderMaterial({
+    uniforms: {
+      tex: {type: 't', value: threeDRtt }
+    },
+    vertexShader: document.getElementById('vertexShader').textContent,
+    fragmentShader: document.getElementById('threshShader').textContent
+  });
+
+
+  fxaaShader = new THREE.ShaderMaterial({
+    uniforms: {
+      tDiffuse: {type: 't', value: bloomTex },
+      resolution: {type: 'v2', value: new THREE.Vector2(1.0/texW,1.0/texH) }
+    },
+    vertexShader: document.getElementById('vertexShader').textContent,
+    fragmentShader: document.getElementById('fxaa').textContent
+  });
+
 
   glowShader = new THREE.ShaderMaterial({
     uniforms:{
@@ -130,7 +170,7 @@ function init(){
 
   blurHShader = new THREE.ShaderMaterial({
     uniforms:{
-      srcTex: {type: 't', value: glowTex},
+      srcTex: {type: 't', value: threeDRtt},
       step: {type: 'v2', value: new THREE.Vector2(1.0/texW, 1.0/texH)}
     },
     vertexShader: document.getElementById('vertexShader').textContent,
@@ -170,14 +210,14 @@ function init(){
 console.log(fbEqShader);
   semShader = new THREE.ShaderMaterial({
     uniforms:{
-      tex: {type: 't', value: THREE.ImageUtils.loadTexture('images/4.png')},
-      tNormal: {type: 't', value: THREE.ImageUtils.loadTexture('images/2563-normalLight.jpg')},
-      repeat: { type: 'v2', value: new THREE.Vector2(1,1) },
+      tex: {type: 't', value:semTextures[36]},
+      tNormal: {type: 't', value: THREE.ImageUtils.loadTexture('images/brick2.jpg')},
+      repeat: { type: 'v2', value: new THREE.Vector2(2,2) },
       useNormal: {type: 'f', value: 1 },
-      useRim: {type: 'f', value: 0.0},
-      rimPower: {type: 'f', value: 60.5},
-      normalScale: {type: 'f', value: 50.5 },
-      normalRepeat: {type: 'f', value: 50.0},
+      useRim: {type: 'f', value: 1},
+      rimPower: {type: 'f', value: 20.5},
+      normalScale: {type: 'f', value: 50.25 },
+      normalRepeat: {type: 'f', value: 1.0},
       time: {type: 'f', value:0.0}
     },
     vertexShader: document.getElementById('semVert').textContent,
@@ -212,6 +252,13 @@ console.log(fbEqShader);
   var rttMat = new THREE.MeshBasicMaterial({map: threeDRtt});
   quad = new THREE.Mesh(screenGeometry, rttMat);
   threeDRttScene.add(quad);
+
+  //var threshMat = new THREE.MeshBasicMaterial({map: threshTex});
+  quad = new THREE.Mesh(screenGeometry, threshShader);
+  threshScene.add(quad);
+
+  quad = new THREE.Mesh(screenGeometry, fxaaShader);
+  fxaaScene.add(quad);
 
 
   var ambientLight = new THREE.AmbientLight( 0x000000 );
@@ -275,7 +322,7 @@ console.log(fbEqShader);
   scene.add(quad);
   */
 
-  renderer = new THREE.WebGLRenderer({ preserveDrawingBuffer:false, alpha: true, antialias:true});
+  renderer = new THREE.WebGLRenderer({ preserveDrawingBuffer:false, alpha: true, antialias:true, precision: "highp"});
   renderer.setSize(w, h);
   renderer.autoClear = true;
   container.appendChild(renderer.domElement);
@@ -288,8 +335,8 @@ console.log(fbEqShader);
 
 function loadGate(){
   var loader = new THREE.JSONLoader();
-  loader.load('models/atrium.json', function (result){
-   // assignUVs(result);
+  loader.load('models/atrium2.js', function (result){
+  // assignUVs(result);
     result.verticesNeedUpdate = true;
     result.normalsNeedUpdate = true;
     result.uvsNeedUpdate = true;
@@ -349,15 +396,29 @@ function loadGate(){
   });
 }
 
+var chanceChange;
+
 
 function render(){
   time += 0.025;
 
-  box.rotation.x = time*0.0625;
+  if(Math.floor(time % 30) == 0){
+    chanceChange = Math.floor(Math.random()*20);
+  }
+
+  if(Math.floor(time % chanceChange) == 0){
+    var randTex = Math.floor(Math.random()*49);
+    semShader.uniforms.tex.value = semTextures[randTex];
+  }
+
+ // box.rotation.x = time*0.0625;
   box.rotation.y = time*0.125;
+  if(gatesLoaded){
+    gate.position.y =-1000 - (Math.sin(time*0.0125))*500;
+  }
   //camera.position.x += (camMouseX - camera.position.x) * .0005;
-  camera.rotation.y -= (camMouseX - camera.position.x) * .00005;
-  camera.rotation.x -= (-camMouseY - camera.position.y) * .00005;
+  camera.rotation.y -= (camMouseX - camera.position.x) * .00001;
+  camera.rotation.x -= (-camMouseY - camera.position.y) * .00001;
   //camera.position.z += (- camMouseY - camera.position.y) * .0005;
   //camera.rotation.y += 0.005;
   //camera.lookAt(new THREE.Vector3(0,-50,0));
@@ -397,14 +458,11 @@ function render(){
   renderer.render(diffScene, orthoCamera);
   */
 
-/*
+
   blurHShader.uniforms.step.value = new THREE.Vector2(1.0/texW, 1.0/texH);
   blurVShader.uniforms.step.value = new THREE.Vector2(1.0/texW, 1.0/texH);
 
-  //renderer.render(camScene, orthoCamera);
-  renderer.render(camScene, orthoCamera, glowTex);
-
-  blurHShader.uniforms.srcTex.value = glowTex;
+  blurHShader.uniforms.srcTex.value = threeDRtt;
 
   renderer.render(blurHScene, orthoCamera, blurHTex);
   renderer.render(blurVScene, orthoCamera, blurVTex);
@@ -415,18 +473,23 @@ function render(){
   blurVShader.uniforms.step.value = new THREE.Vector2(3.0/texW, 3.0/texH);
 
 
-  for(var i = 0; i<3; i++){
+  for(var i = 0; i<1; i++){
     renderer.render(blurHScene, orthoCamera, blurHTex);
     renderer.render(blurVScene, orthoCamera, blurVTex);
   }
-  */
+  
 //renderer.render(blurVScene, orthoCamera);
 
   //renderer.render(bloomScene, orthoCamera, bloomTex);
 
   renderer.render(scene, camera, threeDRtt);
   renderer.render(threeDRttScene, orthoCamera, threeDRttTex);
-  renderer.render(scene, camera);
+  renderer.render(threshScene, orthoCamera, threshTex);
+  renderer.render(bloomScene, orthoCamera, bloomTex);
+  renderer.render(fxaaScene, orthoCamera);
+
+
+
 
 
   window.requestAnimationFrame(render);
@@ -477,6 +540,9 @@ function onWindowResize() {
 
   w = window.innerWidth;
   h = window.innerHeight;
+
+  texW = w;
+  texH = h;
 
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
